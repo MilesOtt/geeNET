@@ -1,3 +1,15 @@
+#-----------------------------------------#
+#                                         #
+# GEE code for networks                   #
+#                                         #
+# With some example code                  #
+#                                         #
+# Work in Progress                        #
+#                                         #
+# Miles Ott miles_ott@alumni.brown.edu    #
+#                                         #
+#-----------------------------------------#
+
 #betas = p vector of regression parameters
 #x.matrix= nxp matrix of covariates
 #link = link between xbeta and the mean
@@ -8,13 +20,14 @@ getD<-function(betas, x.matrix, link){
   if(link=="identity") return(x.matrix)
   
   if(link=="logit"){
-    p=length(betas)	
-    D<-x.matrix
-    logit<-x.matrix %*% betas
-    pi<-exp(logit)/((1+exp(logit))^2)
-    for(i in 1:p){
-      D[,i]<-x.matrix[,i]*pi
-    }	
+    
+     p=length(betas)	
+     D<-x.matrix
+     logit<-x.matrix %*% betas
+     pi<-exp(logit)/((1+exp(logit))^2)
+     for(i in 1:p){
+       D[,i]<-x.matrix[,i]*pi
+     }	
     return(D)
   }
 }
@@ -176,8 +189,8 @@ gee.net<-function(form, link, dist.matrix, dataset){
   
   sandwich<-A%*%(Dt%*%Vi%*%E%*%Vi%*%D)%*%A
   
-  Robust.SE<-sqrt(diag(sandwich))
-  Naive.SE<-sqrt(diag(A))
+  Sandwich.SE<-sqrt(diag(sandwich))
+  ModelBased.SE<-sqrt(diag(A))
 
   
   Z.score<-coef/Robust.SE
@@ -185,7 +198,7 @@ gee.net<-function(form, link, dist.matrix, dataset){
   CI.UB<-coef+1.96*Robust.SE
   p.value<-2*(1-pnorm(abs(Z.score)))
   
-  summary<-cbind(coef, Naive.SE, Robust.SE, CI.LB, CI.UB, Z.score, p.value)
+  summary<-cbind(coef, ModelBased.SE, Sandwich.SE, CI.LB, CI.UB, Z.score, p.value)
   return(list(summary, rho.hat))
   
 }
@@ -222,8 +235,8 @@ require(gee)
 fit.exch.2 <- gee(formula, family=gaussian,
                    data=dietox, id=Pig, corstr = "exchangeable")
 
-summary(fit.exch.2)
-
+summary(fit.exch.2)$coef
+summary(fit.exch.2)$working[1,2] #estimated correlation
 #------------------------- Logit link clustered data try out----------------
 
 require(geepack)
@@ -258,11 +271,12 @@ require(gee)
 fit.exch.2 <- gee(resp~age, family=binomial(link="logit"),
                   data=ohio.1, id=id, corstr = "exchangeable")
 
-summary(fit.exch.2)
+summary(fit.exch.2)$coef
+summary(fit.exch.2)$working[1,2] #estimated correlation
 
 
 #need to fix rho, though it is OK for now
-#need to try with a network situation
+
 
 #---------------------- Network data try with UrWeb Data  -----------------
 
