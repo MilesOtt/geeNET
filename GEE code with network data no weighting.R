@@ -124,21 +124,17 @@ quasi.score<-function(to.optim, dist.matrix, x.matrix, link, y){
       rho.new<-1/scale * t(residual) %*%  cors %*% residual/sum(cors)
     }
     if(link=="logit"){
-     
-      c11<-NULL;  c00<-NULL; c01<-NULL; c10<-NULL
-      
-      for(i in 1:(N-1)){ #change this to be matrix multiplication and not for loops
-        for(j in (i+1):N){
-          if(dist.matrix[i,j]>0 & abs(dist.matrix[i,j])<Inf )
-            c11<-c(c11, sum(y[i]==1 & y[j]==1));          c00<-c(c00, sum(y[i]==0 & y[j]==0))
-          c01<-c(c01, sum(y[i]==0 & y[j]==1));          c10<-c(c10, sum(y[i]==1 & y[j]==0))
+      OR<-NULL
+      for(i in 1:(N)){ #change this to be matrix multiplication and not for loops
+        for(j in (1):N){
+          if(dist.matrix[i,j]>0 & abs(dist.matrix[i,j])<Inf ){
+            x.OR<-x.matrix[i,]-x.matrix[j,]
+            OR<-c(OR, exp(x.OR%*%t(betas.new)))}
         }
       }
     
-      OR<-(mean(c11)*mean(c00)/(mean(c01)*mean(c10)))
-      rho.new=(OR-1)/(OR+1) #Yule's Q transforms OR to be between 0 and 1
-      #I don't think this is the right way to do this, need to find a better 
-      #approximation of the Corelation of Binary Outcomes
+      OR.mean<-mean(OR)
+      rho.new=.5*(OR.mean-1)/(OR.mean+1) #Still not right.  I'm going to be looking into this more
       }
   }  
   return(c(betas.new,rho.new))
@@ -193,9 +189,9 @@ gee.net<-function(form, link, dist.matrix, dataset){
   ModelBased.SE<-sqrt(diag(A))
 
   
-  Z.score<-coef/Robust.SE
-  CI.LB<-coef-1.96*Robust.SE
-  CI.UB<-coef+1.96*Robust.SE
+  Z.score<-coef/Sandwich.SE
+  CI.LB<-coef-1.96*Sandwich.SE
+  CI.UB<-coef+1.96*Sandwich.SE
   p.value<-2*(1-pnorm(abs(Z.score)))
   
   summary<-cbind(coef, ModelBased.SE, Sandwich.SE, CI.LB, CI.UB, Z.score, p.value)
@@ -237,6 +233,62 @@ fit.exch.2 <- gee(formula, family=gaussian,
 
 summary(fit.exch.2)$coef
 summary(fit.exch.2)$working[1,2] #estimated correlation
+
+
+
+#------- Logit Link clustered simulated data try out----------------------------
+
+
+Pig<-seq(0, 99.75, by=.25)
+Pig<-floor(Pig)+1
+
+Feed<-rnorm(400, 0, 3)
+b.0<--2
+b.1<-1
+
+Pig.logit<-b.0+b.1*Feed +rnorm(400, 0, .5)
+Pig.logit[floor(Pig/2)==Pig/2]<-Pig.logit[floor(Pig/2)==Pig/2]+rnorm(200)
+
+p.pig<-exp(Pig.logit)/(1+exp(Pig.logit))
+Big<-NULL
+for(i in 1:length(Pig)){
+  Big<-c(Big, rbinom(1, 1, p.pig[i]))
+}
+
+PigDiet<-as.data.frame(cbind(Pig, Big, Feed))
+
+fit.exch <- geeglm (Big ~ Feed, id =Pig, data = PigDiet,
+                    family=binomial,corstr="ex", std.err="san.se")
+
+
+formula<-"Big ~ Feed"
+link.here="logit"
+N<-dim(PigDiet)[1]
+
+distance.matrix<-matrix(rep(Inf, N*N), nrow=N)
+for(i in 1:N){
+  for(j in 1:N)
+    if (Pig[i]==Pig[j])distance.matrix[i,j]<-1
+}
+diag(distance.matrix)<-0
+
+
+
+
+summary(fit.exch)$coef
+
+
+
+require(gee)
+fit.exch.2 <- gee(formula, family=binomial,
+                  data=PigDiet, id=Pig, corstr = "exchangeable")
+
+summary(fit.exch)$coef
+summary(fit.exch.2)$coef
+summary(fit.exch.2)$working[1,2] #estimated correlation
+
+gee.net(formula, link.here, distance.matrix, data=PigDiet)
+
 #------------------------- Logit link clustered data try out----------------
 
 require(geepack)
