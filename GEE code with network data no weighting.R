@@ -116,27 +116,20 @@ quasi.score<-function(to.optim, dist.matrix, x.matrix, link, y){
     #step 2 given new estimate of beta, estimate rho
     Mean<-getMean(betas=betas.new, x.matrix=x.matrix, link=link)
     V<-getV(betas=betas.new, rho=rho.old, x.matrix=x.matrix, y, dist.matrix=dist.matrix, link=link)
-    
+    residual<-(y-Mean)
     if(link=="identity"){
       scale<-V[1,1]
-      residual<-(y-Mean)
       cors<-dist.matrix
       cors[dist.matrix==Inf]<-0
+      diag(cors)<-0 #not sure if this is right
       rho.new<-1/scale * t(residual) %*%  cors %*% residual/sum(cors)
     }
     if(link=="logit"){
-      OR<-NULL
-      for(i in 1:(N)){ #change this to be matrix multiplication and not for loops
-        for(j in (1):N){
-          if(dist.matrix[i,j]>0 & abs(dist.matrix[i,j])<Inf ){
-            x.OR<-x.matrix[i,]-x.matrix[j,]
-            OR<-c(OR, exp(x.OR%*%t(betas.new)))}
-        }
-      }
-    
-      OR.mean<-mean(OR)
-      rho.new=(OR.mean-1)/(OR.mean+1) #Still not right.  I'm going to be looking into this more
-      #Ziegler mentions Fisher's z association link.  Working on that
+      Vars<-sqrt(diag(V)) 
+      cors<-dist.matrix
+      cors[dist.matrix==Inf]<-0
+      diag(cors)<-0
+      rho.new<- (t(residual)/t(Vars))%*%  cors %*% (residual/Vars)/sum(cors)
       }
   }  
   return(c(betas.new,rho.new))
