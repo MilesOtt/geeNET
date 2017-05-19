@@ -343,6 +343,7 @@ for(i in 1:129){
     w[i,j]<-as.numeric(y[i,j])
   }
 }
+require(sna)
 w.un<-symmetrize(w)
 Marijuana.ever<-subj$mjever!="No"
 Male<-subj$sex=="Male"
