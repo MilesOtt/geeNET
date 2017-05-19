@@ -111,7 +111,8 @@ quasi.score<-function(to.optim, dist.matrix, x.matrix, link, y, W){
     D<-getD(betas=betas.old, x.matrix=x.matrix, link=link)
     Mean<-getMean(betas=betas.old, x.matrix=x.matrix, link=link)
    
-    betas.new<-betas.old+solve(t(D)%*%solve(V)%*%D)%*%t(D)%*%solve(V)%*%(y-Mean) 
+    #---------- Fix below to get correct weighting
+    betas.new<-betas.old+solve(t(D)%*%solve(V)%*%D)%*%t(D)%*% solve(V)%*%W %*%(y-Mean) 
    
     #step 2 given new estimate of beta, estimate rho
     Mean<-getMean(betas=betas.new, x.matrix=x.matrix, link=link)
@@ -122,7 +123,7 @@ quasi.score<-function(to.optim, dist.matrix, x.matrix, link, y, W){
       cors<-dist.matrix
       cors[dist.matrix==Inf]<-0
       diag(cors)<-0 #not sure if this is right
-      rho.new<-1/scale * t(residual) %*%  cors %*% residual/sum(cors)
+      rho.new<-1/scale * t(residual) %*%cors %*% residual/sum(cors)
     }
     if(link=="logit"){
       Vars<-sqrt(diag(V)) 
@@ -141,25 +142,27 @@ quasi.score<-function(to.optim, dist.matrix, x.matrix, link, y, W){
 #link
 #dist.matrix
 #dataset
+#SE sandwich or model.based
+#wt is a vector of weights
 
-gee.net<-function(form, link, dist.matrix, dataset, SE="sandwich", weights==NULL){
+gee.net<-function(form, link, dist.matrix, dataset, SE="sandwich", wt=NULL){
   #returns coef, SE, Z, CI, p-values
-  
   
   fam="gaussian"
   if (link=="logit") fam="binomial"
   
+  if(!is.null(wt))  glm.fit<-glm(form, data=dataset, weights=wt, family=fam)
   
-  glm.fit<-glm(form, data=dataset, weights=weights, family=fam)
+  if(is.null(wt))  glm.fit<-glm(form, data=dataset, family=fam)
   
   initialbetas<-glm.fit$coef
   initialvalues=c(initialbetas, .001) 
   
   y<-glm.fit$y
-  W<-diag(dim(y)[1])
+  W<-diag(dim(dataset)[1])
   
-  if(weights!=NULL)
-  diag(W)<-weights
+  if(!is.null(wt))
+    diag(W)<-wt
   
   n<-length(y)
   p<-length(names(glm.fit$coefficients))
@@ -183,9 +186,9 @@ gee.net<-function(form, link, dist.matrix, dataset, SE="sandwich", weights==NULL
   E[dist.matrix==Inf]<-0 #make sure this is puts 0 values where there is no correlation
   Vi<-solve(V)
   Dt<-t(D)
-  A<-solve(Dt%*%Vi%*%D)
+  A<-solve(Dt%*%W%*%Vi%*%D) #---------- Fix this
   
-  sandwich<-A%*%(Dt%*%Vi%*%E%*%Vi%*%D)%*%A
+  sandwich<-A%*%(Dt%*%W%*%Vi%*%E%*%W%*%Vi%*%D)%*%A #---------- Fix this
   
   Sandwich.SE<-sqrt(diag(sandwich))
   ModelBased.SE<-sqrt(diag(A))
@@ -216,8 +219,12 @@ data(dietox)
                  
 attach(dietox)
 
+wt<-runif(861, 0,1)
+wt<-wt/sum(wt)
+
+
 fit.exch <- geeglm (Weight ~ Time+Cu, id =Pig, data = dietox,
-                 family=gaussian,corstr="ex", std.err="san.se")
+                 family=gaussian,corstr="ex", std.err="san.se", weights=wt)
 
 
 formula<-"Weight ~ Time+Cu"
@@ -231,8 +238,7 @@ for(i in 1:N){
 }
 diag(distance.matrix)<-0
 
-gee.net(formula, link.here, distance.matrix, data=dietox, SE="sandwich")
-
+gee.net(formula, link.here, distance.matrix, data=dietox, SE="sandwich", wt=wt)
 
 summary(fit.exch)$coef
 
