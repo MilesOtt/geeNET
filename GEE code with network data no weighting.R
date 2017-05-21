@@ -117,14 +117,17 @@ quasi.score<-function(to.optim, dist.matrix, x.matrix, link, y){
     Mean<-getMean(betas=betas.new, x.matrix=x.matrix, link=link)
     V<-getV(betas=betas.new, rho=rho.old, x.matrix=x.matrix, y, dist.matrix=dist.matrix, link=link)
     residual<-(y-Mean)
+    cors<-dist.matrix
+
+    
     if(link=="identity"){
-      scale<-V[1,1]
-      cors<-dist.matrix
       cors[dist.matrix==Inf]<-0
-      diag(cors)<-0 #not sure if this is right
+      cors[lower.tri(cors)]<-0
+      scale<-V[1,1]
       rho.new<-1/scale * t(residual) %*%  cors %*% residual/sum(cors)
     }
     if(link=="logit"){
+      #------Using Pearson's Correlation which is constrained by bounds different from -1,1
       Vars<-sqrt(diag(V)) 
       cors<-dist.matrix
       cors[dist.matrix==Inf]<-0
@@ -251,7 +254,7 @@ b.0<--2
 b.1<-1
 
 Pig.logit<-b.0+b.1*Feed +rnorm(400, 0, .5)
-Pig.logit<-Pig.logit+rep(rnorm(100), each= 4)
+Pig.logit<-Pig.logit+rep(rnorm(100, 0, 1.5), each= 4)
 
 p.pig<-exp(Pig.logit)/(1+exp(Pig.logit))
 Big<-NULL
