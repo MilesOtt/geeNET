@@ -40,9 +40,9 @@ getD<-function(betas, x.matrix, link){
 #x.matrix= nxp matrix of covariates
 #dist.matrix is some function of the geodesic distances in the network
 #link = link between xbeta and the mean
+#W= Weights
 
-
-getV<-function(betas, rho, x.matrix, y, dist.matrix, link){
+getV<-function(betas, rho, x.matrix, y, dist.matrix, link, W){
   #returns working covariance matrix
   N=dim(x.matrix)[1]
   A<-matrix(rep(0, N*N), nrow=N)
@@ -52,14 +52,14 @@ getV<-function(betas, rho, x.matrix, y, dist.matrix, link){
     residual<-y-getMean(betas, x.matrix, link)
     sigma<-sqrt(t(residual)%*%residual/length(residual))
     diag(A)<-sigma
-    return(A%*%CorrY%*%A)
+    return(W%*%A%*%CorrY%*%A)
     
   }
  
   if(link=="logit"){
     pi<-getMean(betas, x.matrix, link)
     diag(A)<-sqrt(pi*(1-pi))
-    return(A%*%CorrY%*%A)
+    return(W%*%A%*%CorrY)
     
   }
   
@@ -91,6 +91,7 @@ getMean<-function(betas, x.matrix, link){
 #x.matrix= nxp matrix of covariates
 #link = link between xbeta and the mean
 #y = outcome variable
+#W = weights
 
 quasi.score<-function(to.optim, dist.matrix, x.matrix, link, y, W){
   #returns betas and rho
@@ -107,16 +108,16 @@ quasi.score<-function(to.optim, dist.matrix, x.matrix, link, y, W){
     betas.old<-betas.new
     
     #step 1 estimate beta
-    V<-getV(betas=betas.old, rho=rho.old, x.matrix=x.matrix, y, dist.matrix=dist.matrix, link=link)
+    V<-getV(betas=betas.old, rho=rho.old, x.matrix=x.matrix, y, dist.matrix=dist.matrix, link=link, W)
     D<-getD(betas=betas.old, x.matrix=x.matrix, link=link)
     Mean<-getMean(betas=betas.old, x.matrix=x.matrix, link=link)
    
     #---------- Fix below to get correct weighting
-    betas.new<-betas.old+solve(t(D)%*%solve(V)%*%D)%*%t(D)%*% solve(V)%*%W %*%(y-Mean) 
+    betas.new<-betas.old+solve(t(D)%*%solve(V)%*%D)%*%t(D)%*% solve(V)%*%(y-Mean) 
    
     #step 2 given new estimate of beta, estimate rho
     Mean<-getMean(betas=betas.new, x.matrix=x.matrix, link=link)
-    V<-getV(betas=betas.new, rho=rho.old, x.matrix=x.matrix, y, dist.matrix=dist.matrix, link=link)
+    V<-getV(betas=betas.new, rho=rho.old, x.matrix=x.matrix, y, dist.matrix=dist.matrix, link=link, W)
     residual<-(y-Mean)
     if(link=="identity"){
       scale<-V[1,1]
@@ -178,7 +179,7 @@ gee.net<-function(form, link, dist.matrix, dataset, SE="sandwich", wt=NULL){
   
   
   D<-getD(coef, x.matrix, link)
-  V<-getV(coef, rho.hat, x.matrix, y, dist.matrix, link)
+  V<-getV(coef, rho.hat, x.matrix, y, dist.matrix, link, W)
   Mean<-getMean(coef, x.matrix, link)
   
 
@@ -186,9 +187,9 @@ gee.net<-function(form, link, dist.matrix, dataset, SE="sandwich", wt=NULL){
   E[dist.matrix==Inf]<-0 #make sure this is puts 0 values where there is no correlation
   Vi<-solve(V)
   Dt<-t(D)
-  A<-solve(Dt%*%W%*%Vi%*%D) #---------- Fix this
+  A<-solve(Dt%*%Vi%*%D) 
   
-  sandwich<-A%*%(Dt%*%W%*%Vi%*%E%*%W%*%Vi%*%D)%*%A #---------- Fix this
+  sandwich<-A%*%(Dt%*%Vi%*%E%*%Vi%*%D)%*%A 
   
   Sandwich.SE<-sqrt(diag(sandwich))
   ModelBased.SE<-sqrt(diag(A))
@@ -219,8 +220,8 @@ data(dietox)
                  
 attach(dietox)
 
-wt<-runif(861, 0,1)
-wt<-wt/sum(wt)
+wt<-1/runif(861, 0,1)
+wt<-wt*length(wt)/sum(wt)
 
 
 fit.exch <- geeglm (Weight ~ Time+Cu, id =Pig, data = dietox,
